@@ -17,7 +17,7 @@ class EmailVerification:
     attempt: int
     verified: bool
 
-    def save_state(self):
+    def save_state(self, expire=None):
         print("Saving", self)
     
 

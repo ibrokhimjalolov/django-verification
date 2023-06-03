@@ -1,12 +1,16 @@
 from uuid import uuid4
-
+from django.core.mail import EmailMultiAlternatives
+from django.template import Context
+from django.template.loader import render_to_string
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from drf_yasg import openapi
 from .. import serializers
-from ..utils import check_email_for_code, get_email_verification, EmailVerification
+from ..settings import get_email_settings
+from ..utils import get_email_verification, EmailVerification
+from dataclasses import asdict
 
 
 class VerificationUnprocessableEntity(Exception):
@@ -55,8 +59,11 @@ class EmailSendVerificationCodeView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = serializers.EmailSendCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
+        validated_data["uuid"] = uuid4()
+        validated_data["code"] = "1234"
         try:
-            self.send_email_verification_code(serializer.validated_data, raise_exception=True)
+            self.send_email_verification_code(validated_data, raise_exception=True)
         except VerificationUnprocessableEntity as e:
             response = {
                 "success": False,
@@ -66,20 +73,31 @@ class EmailSendVerificationCodeView(APIView):
             return Response(response, status=status.HTTP_200_OK)
         response = {
             "success": True,
-            "email": serializer.validated_data["email"],
-            "uuid": uuid4(),
+            "email": validated_data["email"],
+            "uuid": validated_data["uuid"],
         }
         return Response(response, status=status.HTTP_200_OK)
 
     def send_email_verification_code(self, validated_data, raise_exception=False):
+        email_settings = get_email_settings()
         email_verification = EmailVerification(
-            validated_data["email"],
-            validated_data["uuid"],
-            "1234",
-            0,
-            False,
+            email=validated_data["email"],
+            uuid=validated_data["uuid"],
+            code="1234",
+            attempt=0,
+            verified=False
         )
-        email_verification.save_state()
+
+        c = {**asdict(email_verification), **email_settings["template_context"]}
+        text_content = render_to_string('verification/email/template.txt', c)
+        html_content = render_to_string('verification/email/template.html', c)
+        email = EmailMultiAlternatives('Subject', text_content)
+        email.attach_alternative(html_content, "text/html")
+        email.to = [validated_data["email"]]
+        email.send()
+
+        email_settings = get_email_settings()
+        email_verification.save_state(expire=email_settings["code_expiration"])
 
     def fail(self, code):
         raise VerificationUnprocessableEntity(self.errors[code], code=code)
@@ -139,8 +157,9 @@ class EmailVerifyVerificationCodeView(APIView):
         return Response(response, status=status.HTTP_200_OK)
 
     def verify_verification_code(self, validated_data, raise_exception=False):
+        email_settings = get_email_settings()
         email_verification = get_email_verification(validated_data["email"], validated_data["uuid"])
-        if email_verification.attempt >= 3:
+        if email_verification.attempt >= email_settings["attempt_limit"]:
             self.fail("email_not_found")
         if email_verification.code != validated_data["code"]:
             email_verification.attempt += 1

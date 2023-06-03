@@ -5,13 +5,13 @@ app_name = 'verification'
 
 urlpatterns = [
     path(
-        "EmailSendCode/",
+        "EmailVerifyVerificationCode/",
         views.EmailVerifyVerificationCodeView.as_view(),
-        name="EmailSendCodeView"
+        name="EmailVerifyVerificationCode"
     ),
     path(
         "EmailSendVerificationCode/",
         views.EmailSendVerificationCodeView.as_view(),
-        name="EmailSendCode"
+        name="EmailSendVerificationCode"
     ),
 ]
