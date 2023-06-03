@@ -1,3 +1,5 @@
+import logging
+import random
 from uuid import uuid4
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
@@ -60,7 +62,7 @@ class EmailSendVerificationCodeView(APIView):
         serializer.is_valid(raise_exception=True)
         validated_data = serializer.validated_data
         validated_data["uuid"] = uuid4()
-        validated_data["code"] = "1234"
+        validated_data["code"] = self.generate_code()
         try:
             self.send_email_verification_code(validated_data, raise_exception=True)
         except VerificationUnprocessableEntity as e:
@@ -82,7 +84,7 @@ class EmailSendVerificationCodeView(APIView):
         email_verification = EmailVerification(
             email=validated_data["email"],
             uuid=validated_data["uuid"],
-            code="1234",
+            code=validated_data["code"],
             attempt=0,
             verified=False
         )
@@ -93,13 +95,25 @@ class EmailSendVerificationCodeView(APIView):
         email = EmailMultiAlternatives('Subject', text_content)
         email.attach_alternative(html_content, "text/html")
         email.to = [validated_data["email"]]
-        email.send()
+        try:
+            email.send()
+        except Exception as ex:
+            logging.error(str(ex))
+            self.fail("email_cant_send")
 
         email_settings = get_email_settings()
         email_verification.save_state(expire=email_settings["code_expiration"])
 
     def fail(self, code):
         raise VerificationUnprocessableEntity(self.errors[code], code=code)
+
+    @staticmethod
+    def generate_code():
+        settings = get_email_settings()
+        return "".join(random.choices(
+            settings["code_charset"],
+            k=settings["code_length"]
+        ))
 
 
 class EmailVerifyVerificationCodeView(APIView):
@@ -110,6 +124,7 @@ class EmailVerifyVerificationCodeView(APIView):
     errors = {
         "email_invalid_code": "Invalid code",
         "email_not_found": "Email not found",
+        "email_already_verified": "Email already verified",
     }
 
     @swagger_auto_schema(
@@ -158,7 +173,12 @@ class EmailVerifyVerificationCodeView(APIView):
     def verify_verification_code(self, validated_data, raise_exception=False):
         email_settings = get_email_settings()
         email_verification = get_email_verification(validated_data["email"], validated_data["uuid"])
+        if not email_verification:
+            self.fail("email_not_found")
+        if email_verification.verified:
+            self.fail("email_already_verified")
         if email_verification.attempt >= email_settings["attempt_limit"]:
+            email_verification.delete(email_verification.email, email_verification.uuid)
             self.fail("email_not_found")
         if email_verification.code != validated_data["code"]:
             email_verification.attempt += 1

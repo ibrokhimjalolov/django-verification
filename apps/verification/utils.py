@@ -20,7 +20,7 @@ class EmailVerification:
         cache = get_cache()
         key = cls.get_key(email, uuid)
         data = cache.get(key)
-        if not data:
+        if data:
             return cls(**data)
 
     @classmethod
