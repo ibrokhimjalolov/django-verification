@@ -1,6 +1,5 @@
 from uuid import uuid4
 from django.core.mail import EmailMultiAlternatives
-from django.template import Context
 from django.template.loader import render_to_string
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
