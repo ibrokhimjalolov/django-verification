@@ -14,4 +14,14 @@ urlpatterns = [
         views.EmailSendVerificationCodeView.as_view(),
         name="EmailSendVerificationCode"
     ),
+    path(
+        "PhoneVerifyVerificationCode/",
+        views.PhoneVerifyVerificationCodeView.as_view(),
+        name="PhoneVerifyVerificationCode"
+    ),
+    path(
+        "PhoneSendVerificationCode/",
+        views.PhoneSendVerificationCodeView.as_view(),
+        name="PhoneSendVerificationCode"
+    ),
 ]

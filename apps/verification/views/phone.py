@@ -7,34 +7,34 @@ from rest_framework.response import Response
 from drf_yasg import openapi
 from .. import serializers
 from ..exceptions import VerificationUnprocessableEntity
-from ..settings import get_email_settings
-from ..utils import EmailVerification
-from ..senders import send_email_verification_code
+from ..settings import get_phone_settings
+from ..utils import PhoneVerification
+from ..senders import send_phone_verification_code
 
 
-class EmailSendVerificationCodeView(APIView):
+class PhoneSendVerificationCodeView(APIView):
     """
     Send verification code to email
     """
 
     errors = {
-        "email_not_found": "Email not found",
-        "email_not_verified": "Email not verified",
-        "email_cant_send": "Email can't send",
+        "phone_not_found": "Phone not found",
+        "phone_not_verified": "Phone not verified",
+        "phone_cant_send": "Phone can't send",
     }
 
     @swagger_auto_schema(
-        request_body=serializers.EmailSendCodeSerializer,
+        request_body=serializers.PhoneSendCodeSerializer,
         responses={
             status.HTTP_200_OK: openapi.Response(
-                description="Email verification code sent successfully",
+                description="Phone verification code sent successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         "success": openapi.Schema(
                             type=openapi.TYPE_BOOLEAN,
                         ),
-                        "email": openapi.Schema(
+                        "phone": openapi.Schema(
                             type=openapi.TYPE_STRING,
                         ),
                         "uuid": openapi.Schema(
@@ -47,23 +47,22 @@ class EmailSendVerificationCodeView(APIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        serializer = serializers.EmailSendCodeSerializer(data=request.data)
+        serializer = serializers.PhoneSendCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated_data = serializer.validated_data
         validated_data["uuid"] = uuid4()
         validated_data["code"] = self.generate_code()
-        email_settings = get_email_settings()
-        email_verification = EmailVerification(
-            email=validated_data["email"],
+        phone_settings = get_phone_settings()
+        phone_verification = PhoneVerification(
+            phone=validated_data["phone"],
             uuid=validated_data["uuid"],
             code=validated_data["code"],
             attempt=0,
             verified=False
         )
-        template_context = email_settings["template_context"]
         try:
-            if not email_settings["skip_sending"]:
-                send_email_verification_code(email_verification, template_context)
+            if not phone_settings["skip_sending"]:
+                send_phone_verification_code(phone_verification)
         except VerificationUnprocessableEntity as e:
             response = {
                 "success": False,
@@ -71,10 +70,10 @@ class EmailSendVerificationCodeView(APIView):
                 "error_message": e.message,
             }
             return Response(response, status=status.HTTP_200_OK)
-        email_verification.save_state(expire=email_settings["code_expiration"])
+        phone_verification.save_state(expire=phone_settings["code_expiration"])
         response = {
             "success": True,
-            "email": validated_data["email"],
+            "phone": str(validated_data["phone"]),
             "uuid": validated_data["uuid"],
         }
         return Response(response, status=status.HTTP_200_OK)
@@ -84,36 +83,36 @@ class EmailSendVerificationCodeView(APIView):
 
     @staticmethod
     def generate_code():
-        settings = get_email_settings()
+        settings = get_phone_settings()
         return "".join(random.choices(
             settings["code_charset"],
             k=settings["code_length"]
         ))
 
 
-class EmailVerifyVerificationCodeView(APIView):
+class PhoneVerifyVerificationCodeView(APIView):
     """
     Send verification code to email
     """
 
     errors = {
-        "email_invalid_code": "Invalid code",
-        "email_not_found": "Email not found",
-        "email_already_verified": "Email already verified",
+        "phone_invalid_code": "Invalid code",
+        "phone_not_found": "Phone not found",
+        "phone_already_verified": "Phone already verified",
     }
 
     @swagger_auto_schema(
-        request_body=serializers.EmailVerifyCodeSerializer,
+        request_body=serializers.PhoneVerifyCodeSerializer,
         responses={
             status.HTTP_200_OK: openapi.Response(
-                description="Email verification code sent successfully",
+                description="Phone verification code sent successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         "success": openapi.Schema(
                             type=openapi.TYPE_BOOLEAN,
                         ),
-                        "email": openapi.Schema(
+                        "phone": openapi.Schema(
                             type=openapi.TYPE_STRING,
                         ),
                         "uuid": openapi.Schema(
@@ -126,7 +125,7 @@ class EmailVerifyVerificationCodeView(APIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        serializer = serializers.EmailVerifyCodeSerializer(data=request.data)
+        serializer = serializers.PhoneVerifyCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
@@ -141,26 +140,26 @@ class EmailVerifyVerificationCodeView(APIView):
 
         response = {
             "success": True,
-            "email": serializer.validated_data["email"],
+            "phone": str(serializer.validated_data["phone"]),
         }
         return Response(response, status=status.HTTP_200_OK)
 
     def verify_verification_code(self, validated_data, raise_exception=False):
-        email_settings = get_email_settings()
-        email_verification = EmailVerification.retrieve(validated_data["email"], validated_data["uuid"])
-        if not email_verification:
-            self.fail("email_not_found")
-        if email_verification.verified:
-            self.fail("email_already_verified")
-        if email_verification.attempt >= email_settings["attempt_limit"]:
-            email_verification.delete(email_verification.email, email_verification.uuid)
-            self.fail("email_not_found")
-        if email_verification.code != validated_data["code"]:
-            email_verification.attempt += 1
-            email_verification.save_state()
-            self.fail("email_invalid_code")
-        email_verification.verified = True
-        email_verification.save_state()
+        phone_settings = get_phone_settings()
+        phone_verification = PhoneVerification.retrieve(validated_data["phone"], validated_data["uuid"])
+        if not phone_verification:
+            self.fail("phone_not_found")
+        if phone_verification.verified:
+            self.fail("phone_already_verified")
+        if phone_verification.attempt >= phone_settings["attempt_limit"]:
+            phone_verification.delete(phone_verification.phone, phone_verification.uuid)
+            self.fail("phone_not_found")
+        if phone_verification.code != validated_data["code"]:
+            phone_verification.attempt += 1
+            phone_verification.save_state()
+            self.fail("phone_invalid_code")
+        phone_verification.verified = True
+        phone_verification.save_state()
 
     def fail(self, code):
         raise VerificationUnprocessableEntity(self.errors[code], code=code)

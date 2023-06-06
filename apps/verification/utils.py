@@ -33,16 +33,41 @@ class EmailVerification:
         cache = get_cache()
         key = self.get_key(self.email, self.uuid)
         cache.set(key, asdict(self), expire)
-        logging.debug(f"EmailVerification.save_state: {self}")
+        logging.debug(f"{self.__class__.__name__}.save_state: {self}")
 
     @classmethod
     def get_key(cls, email, uuid):
         return f"email_verification:{email}:{uuid}"
 
 
-def get_email_verification(email, uuid):
-    return EmailVerification.retrieve(email, uuid)
+@dataclass
+class PhoneVerification:
+    phone: str
+    uuid: str
+    code: str
+    attempt: int
+    verified: bool
 
+    @classmethod
+    def retrieve(cls, phone, uuid):
+        cache = get_cache()
+        key = cls.get_key(phone, uuid)
+        data = cache.get(key)
+        if data:
+            return cls(**data)
 
-def delete_email_verification(email, uuid):
-    EmailVerification.delete(email, uuid)
+    @classmethod
+    def delete(cls, phone, uuid):
+        cache = get_cache()
+        key = cls.get_key(phone, uuid)
+        cache.delete(key)
+
+    def save_state(self, expire=None):
+        cache = get_cache()
+        key = self.get_key(self.phone, self.uuid)
+        cache.set(key, asdict(self), expire)
+        logging.debug(f"{self.__class__.__name__}.save_state: {self}")
+
+    @classmethod
+    def get_key(cls, phone, uuid):
+        return f"phone_verification:{phone}:{uuid}"

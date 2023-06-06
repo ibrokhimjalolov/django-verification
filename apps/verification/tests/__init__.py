@@ -1,2 +1,2 @@
-from .email import *
 from .phone import *
+from .email import *
