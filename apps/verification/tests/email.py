@@ -1,11 +1,14 @@
 from django.test import TestCase
 from django.urls import reverse_lazy
-
+from django.core.cache import cache
 from apps.verification.settings import get_email_settings
 from apps.verification.utils import EmailVerification
 
 
 class EmailTest(TestCase):
+
+    def setUp(self) -> None:
+        cache.clear()
 
     def test_invalid_email(self):
         email = "fake"  # invalid format of phone number
